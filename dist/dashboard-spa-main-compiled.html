@@ -11199,13 +11199,8 @@ function renderComponentsPage() {
 
   const solidColors = [
     { color: 'teal', icon: 'speed', title: 'Teal Card', value: '1,234', subtitle: 'The default color', trend: 'up', trendValue: '+12%' },
-    { color: 'fandango', icon: 'favorite', title: 'Fandango Card', value: '567', subtitle: 'A bold pink-purple' },
+    { color: 'fandango', icon: 'favorite', title: 'Fandango Card', value: '567', subtitle: 'Bold pink-purple' },
     { color: 'orange', icon: 'local_fire_department', title: 'Orange Card', value: '89.2%', subtitle: 'Warm and attention-grabbing' },
-    { color: 'success', icon: 'check_circle', title: 'Success Card', value: '42', subtitle: 'Green for positive metrics', trend: 'up', trendValue: '+5' },
-    { color: 'error', icon: 'error', title: 'Error Card', value: '3', subtitle: 'Red for alerts or failures', trend: 'down', trendValue: '-2' },
-    { color: 'snooze', icon: 'bedtime', title: 'Snooze Card', value: '7.5h', subtitle: 'Deep purple' },
-    { color: 'warning', icon: 'warning', title: 'Warning Card', value: '15', subtitle: 'Amber for caution' },
-    { color: 'bask', icon: 'whatshot', title: 'Bask Card', value: '$4,200', subtitle: 'Warm red-coral' },
   ];
 
   solidColors.forEach(opts => {
@@ -11221,7 +11216,7 @@ function renderComponentsPage() {
   const accentSection = document.createElement('div');
   accentSection.innerHTML = `
     <h2 class="text-xl font-semibold text-rewst-black mb-2">Metric Cards — Accent Border</h2>
-    <p class="text-sm text-rewst-gray mb-4">Set <code>solidBackground: false</code> for a lighter card with a colored left border</p>
+    <p class="text-sm text-rewst-gray mb-4">Use <code>cardClass: 'card-accent-teal'</code> for a white card with colored left border</p>
   `;
   container.appendChild(accentSection);
 
@@ -11230,9 +11225,9 @@ function renderComponentsPage() {
   container.appendChild(accentGrid);
 
   const accentColors = [
-    { color: 'teal', icon: 'analytics', title: 'Accent Teal', value: '99.9%', subtitle: 'Light card, teal border' },
-    { color: 'fandango', icon: 'star', title: 'Accent Fandango', value: '256', subtitle: 'Light card, fandango border' },
-    { color: 'orange', icon: 'bolt', title: 'Accent Orange', value: '38m', subtitle: 'Light card, orange border' },
+    { color: 'teal', icon: 'analytics', title: 'Accent Teal', value: '99.9%', subtitle: 'White card, teal left border', cardClass: 'card-accent-teal' },
+    { color: 'fandango', icon: 'star', title: 'Accent Fandango', value: '256', subtitle: 'White card, fandango left border', cardClass: 'card-accent-fandango' },
+    { color: 'orange', icon: 'bolt', title: 'Accent Orange', value: '38m', subtitle: 'White card, orange left border', cardClass: 'card-accent-orange' },
   ];
 
   accentColors.forEach(opts => {
