@@ -1008,11 +1008,11 @@ select#form-selector {
 
 
 /* Toggle switch styling */
-#exclude-test-runs:checked+.toggle-bg {
+input[type="checkbox"].sr-only:checked+.toggle-bg {
   background-color: #009490 !important;
 }
 
-#exclude-test-runs:focus+.toggle-bg {
+input[type="checkbox"].sr-only:focus+.toggle-bg {
   box-shadow: 0 0 0 3px rgba(0, 148, 144, 0.2);
 }
 
@@ -1226,21 +1226,16 @@ select#form-selector {
     FILTER SIDE BAR STYLING 
     ============================================ */
 
-/* Advanced Filter Drawer Styles */
+/* Filter Drawer Styles */
+#filter-drawer.open,
 #advanced-filter-drawer.open {
   transform: translateX(0);
 }
 
+#filter-overlay.open,
 #advanced-filter-overlay.open {
   display: block;
   opacity: 1;
-}
-
-/* Dropdown animations */
-#org-filter-dropdown,
-#date-filter-dropdown,
-#trigger-filter-dropdown {
-  animation: slideDown 0.2s ease-out;
 }
 
 @keyframes slideDown {
@@ -1657,6 +1652,48 @@ tbody tr:nth-child(10) { animation-delay: 270ms; }
 
   </div>
 
+  <!-- Filter Slide-Out Drawer -->
+  <div id="filter-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden transition-opacity duration-300"></div>
+
+  <div id="filter-drawer" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform translate-x-full transition-transform duration-300">
+    <!-- Drawer Header -->
+    <div class="flex items-center justify-between px-8 py-4 border-b border-gray-200 bg-gray-50">
+      <h3 class="text-base font-semibold text-rewst-black">Filters</h3>
+      <button id="close-filter-drawer" class="text-gray-500 hover:text-gray-700 transition-colors">
+        <span class="material-icons">close</span>
+      </button>
+    </div>
+
+    <!-- Drawer Content — add your filter controls here -->
+    <div class="p-6 overflow-y-auto" style="height: calc(100% - 65px);">
+
+      <!-- Example: Organization Filter -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium text-rewst-dark-gray mb-2">Organization</label>
+        <div id="filter-org-container">
+          <!-- Populate with RewstDOM.createAutocomplete() or createStyledDropdown() -->
+        </div>
+      </div>
+
+      <!-- Example: Date Range Filter -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium text-rewst-dark-gray mb-2">Date Range</label>
+        <div id="filter-date-container">
+          <!-- Populate with RewstDOM.createStyledDropdown() -->
+        </div>
+      </div>
+
+      <!-- Example: Custom Filter -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium text-rewst-dark-gray mb-2">Custom Filter</label>
+        <div id="filter-custom-container">
+          <!-- Populate with RewstDOM.createMultiSelect() -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- Main Content -->
   <div id="main-content" class="main-content min-h-screen">
 
@@ -1668,9 +1705,33 @@ tbody tr:nth-child(10) { animation-delay: 270ms; }
           <p class="header-subtitle text-sm text-rewst-gray">Kitchen sink of available UI components</p>
         </div>
         <div class="flex items-center gap-3">
-          <div id="header-controls">
-            <!-- Add your global header controls here -->
+
+          <!-- Toggle Switch Example -->
+          <label id="toggle-example" class="flex items-center gap-2 cursor-pointer">
+            <span class="text-sm text-rewst-gray">Toggle</span>
+            <div class="relative inline-block w-12 h-6">
+              <input type="checkbox" id="header-toggle" class="sr-only">
+              <div class="toggle-bg w-12 h-6 bg-gray-300 rounded-full transition-all duration-200"></div>
+              <div class="toggle-dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200 shadow-sm"></div>
+            </div>
+          </label>
+
+          <!-- Refresh Button -->
+          <div id="refresh-button-container">
+            <button id="refresh-btn" class="btn-primary flex items-center gap-2">
+              <span class="material-icons">refresh</span>
+              <span class="btn-text">Refresh</span>
+            </button>
           </div>
+
+          <!-- Filters Button (opens drawer) -->
+          <div id="filter-button-container">
+            <button id="open-filter-drawer" class="btn-secondary flex items-center gap-2">
+              <span class="material-icons">filter_list</span>
+              <span class="btn-text">Filters</span>
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
@@ -11065,6 +11126,48 @@ if (typeof module !== 'undefined' && module.exports) {
 
         lastScrollTop = scrollTop;
       }, { passive: true });
+
+      // ============================================
+      // HEADER TOGGLE SWITCH
+      // ============================================
+      const headerToggle = document.getElementById('header-toggle');
+      const toggleDot = document.querySelector('.toggle-dot');
+
+      headerToggle.addEventListener('change', () => {
+        toggleDot.style.transform = headerToggle.checked ? 'translateX(24px)' : 'translateX(0)';
+        // Hook into this for your toggle logic:
+        debugLog('Toggle:', headerToggle.checked);
+      });
+
+      // ============================================
+      // REFRESH BUTTON
+      // ============================================
+      document.getElementById('refresh-btn').addEventListener('click', () => {
+        debugLog('Refresh clicked');
+        RewstDOM.showInfo('Refresh triggered — wire up your data reload here');
+        // Add your refresh/reload logic here
+      });
+
+      // ============================================
+      // FILTER DRAWER
+      // ============================================
+      const filterOverlay = document.getElementById('filter-overlay');
+      const filterDrawer = document.getElementById('filter-drawer');
+
+      document.getElementById('open-filter-drawer').addEventListener('click', () => {
+        filterOverlay.classList.remove('hidden');
+        filterOverlay.classList.add('open');
+        filterDrawer.classList.add('open');
+      });
+
+      const closeDrawer = () => {
+        filterOverlay.classList.remove('open');
+        filterDrawer.classList.remove('open');
+        setTimeout(() => { filterOverlay.classList.add('hidden'); }, 300);
+      };
+
+      document.getElementById('close-filter-drawer').addEventListener('click', closeDrawer);
+      filterOverlay.addEventListener('click', closeDrawer);
 
       // ============================================
       // PAGE RENDER FUNCTIONS
