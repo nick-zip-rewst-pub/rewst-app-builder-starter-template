@@ -1,72 +1,64 @@
-# Rewst Analytics Dashboard aka RAD
+# Rewst App Builder Template
 
-**Author:** Nick Zipse | https://github.com/nick-zip-rewst-pub
+A barebones starter template for building single-page apps on the Rewst App Builder platform.
 
-## Overview
-This is an example of how to use the App Builder inside of the Rewst platform. This dashboard demonstrates building modular JavaScript components that compile into a single HTML file for deployment.
+**Author:** Nick Zipse
 
-#### ⚠️  Disclaimer:
-- This project is a **community contribution** and is **not an official Rewst product**. It is not developed, maintained, or supported by Rewst.
-
-
+> **Disclaimer:** This project is a community contribution and is not an official Rewst product.
 
 ## Quick Start
 
-Copy the entire contents of `dist/dashboard-spa-main-compiled.html` into a **HTML component** in Rewst App Builder. That's it - this single file contains all the CSS, JavaScript, and page logic needed to run the dashboard.
+1. Clone this repo
+2. Run `node build.js`
+3. Copy the contents of `dist/dashboard-spa-main-compiled.html` into a **HTML component** in Rewst App Builder
 
-## Using the Dashboard
+That's it. The compiled file contains everything — CSS, JavaScript, and HTML — in a single file.
 
-### Global Filters (Top Navigation)
+## What's Included
 
-- **Exclude Test Runs** - Toggle to filter out test workflow executions from all metrics
-- **Tenant Filter** - Filter data by specific tenant/organization
-- **Trigger Type** - Filter workflows by how they were triggered (manual, scheduled, webhook, etc.)
+### Skeleton
+- **Collapsible sidebar** with page navigation
+- **Sticky header** that shrinks on scroll (subtitle hides, buttons go icon-only)
+- **Toggle switch**, **Refresh button**, and **Filters button** in the header
+- **Slide-out filter drawer** on the right with placeholder filter slots
+- **Page switching** system — sidebar clicks swap pages and update the header
 
-### Dashboard Overview
-
-The main overview page shows high-level metrics including:
-- Total workflow executions
-- Success/failure rates
-- Execution trends over time
-- Top workflows by execution count
-
-### Navigating to Details
-
-- Click the **eyeball icon** in any table row to jump to a detailed view of that workflow or form
-- Detail views show execution history, timing metrics, and error breakdowns
+### Core Libraries (src/)
+- **RewstDOM** (`rewst-dom-builder.js`) — UI component library: tables with sorting/search/pagination, metric cards, autocomplete, dropdowns, alerts, loading skeletons
+- **RewstApp** (`zip-graphql-js-lib-v2-optimized.js`) — Rewst GraphQL API wrapper: run workflows, submit forms, fetch executions, manage orgs
+- **Rewst Theme** (`rewst-override-tailwind.css`) — Rewst brand colors and component styles layered on Tailwind CSS
 
 ### Pages
-
-| Page | Description |
-|------|-------------|
-| **Overview** | High-level metrics and trends across all workflows |
-| **Workflow Detail** | Deep dive into a specific workflow's execution history, timing, and errors |
-| **Form Detail** | Analytics for form submissions and completion rates |
-| **Insights** | Aggregated insights and patterns across your automation |
-| **Adoption** | Organization-level metrics showing form usage per org, user engagement, and adoption trends |
+- **Components** — Kitchen sink showing every available UI component (metric cards, tables, autocomplete, dropdowns, buttons, badges, alerts, colors, skeletons)
+- **Starter** — Blank page with a welcome card and commented examples to get you going
 
 ## Project Structure
 
 ```
-├── src/
-│   ├── rewst-override-tailwind.css    # Tailwind overrides & Rewst theme
-│   ├── zip-graphql-js-lib-v2-optimized.js  # GraphQL API wrapper
-│   └── rewst-dom-builder.js           # DOM builder utilities
-├── pages/
-│   ├── overalldash.js                 # Main dashboard overview
-│   ├── workflowdetail.js              # Workflow detail view
-│   ├── formdetail.js                  # Form detail view
-│   ├── insightsdetail.js              # Insights page
-│   └── adoptiondetail.js              # Adoption metrics page
-├── dashboard-spa-main-template.html   # HTML template with markers
+├── dashboard-spa-main-template.html   # HTML shell with {{ MARKER }} placeholders
+├── build.js                           # Replaces markers with file contents
 ├── dist/
-│   └── dashboard-spa-main-compiled.html  # Combined output (generated)
-└── build.js                           # Combines files into dist/
+│   └── dashboard-spa-main-compiled.html  # Compiled output → paste into Rewst
+├── src/
+│   ├── rewst-dom-builder.js           # RewstDOM component library
+│   ├── zip-graphql-js-lib-v2-optimized.js  # RewstApp API wrapper
+│   └── rewst-override-tailwind.css    # Rewst theme CSS
+└── pages/
+    ├── components.js                  # Kitchen sink demo page
+    └── starter.js                     # Blank starter page
 ```
 
-## How It Works
+## How to Build
 
-The `build.js` script takes `dashboard-spa-main-template.html` and replaces markers like `{{ CSS_THEME }}` with the actual file contents, producing a single `dist/dashboard-spa-main-compiled.html` file ready to paste into Rewst App Builder.
+```bash
+node build.js
+```
+
+The build script replaces `{{ MARKER }}` placeholders in the template with actual file contents and writes the result to `dist/`. No npm install needed.
+
+## Adding New Pages
+
+See [CLAUDE.md](CLAUDE.md) for step-by-step instructions on adding pages, using components, and avoiding gotchas.
 
 ## Markers
 
@@ -75,15 +67,5 @@ The `build.js` script takes `dashboard-spa-main-template.html` and replaces mark
 | `{{ CSS_THEME }}` | src/rewst-override-tailwind.css |
 | `{{ GRAPHQL_LIB }}` | src/zip-graphql-js-lib-v2-optimized.js |
 | `{{ DOM_BUILDER }}` | src/rewst-dom-builder.js |
-| `{{ PAGE_OVERALL }}` | pages/overalldash.js |
-| `{{ PAGE_WORKFLOW }}` | pages/workflowdetail.js |
-| `{{ PAGE_FORM }}` | pages/formdetail.js |
-| `{{ PAGE_INSIGHTS }}` | pages/insightsdetail.js |
-| `{{ PAGE_ADOPTION }}` | pages/adoptiondetail.js |
-
-## Customization
-
-1. Fork this repo
-2. Edit the source files in `src/` and `pages/`
-3. Run `node build.js`
-4. Copy `dist/dashboard-spa-main-compiled.html` into your Rewst App Builder
+| `{{ PAGE_COMPONENTS }}` | pages/components.js |
+| `{{ PAGE_STARTER }}` | pages/starter.js |
