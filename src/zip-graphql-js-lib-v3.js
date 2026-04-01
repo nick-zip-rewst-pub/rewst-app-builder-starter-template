@@ -2,11 +2,16 @@
  * Rewst App Builder Library
  * @fileoverview Simple utilities for creating and manipulating DOM elements
  * @author Nick Zipse <nick.zipse@rewst.com>
- * @version 4.2.0
- * 
+ * @version 5.0.0 (v3)
+ *
  * A comprehensive JavaScript library for building custom apps in Rewst's App Builder.
  * Provides easy workflow execution, form submission, debugging tools, trigger analysis,
- * and form field conditional logic (show/hide based on other field values).
+ * form field conditional logic, AND full GraphQL API management for:
+ * - Tags (CRUD, assign to workflows/templates)
+ * - Workflows (list, search, update tags, update humanSecondsSaved, clone)
+ * - Scripts/Templates (list, get, update with tags, sync to clones)
+ * - Apps/Sites (create, update, publish, clone, pages)
+ * - Pages (create, update content via HTMLContainer)
  *
  * Quick Start:
  *   const rewst = new RewstApp({ debug: true });
@@ -5265,6 +5270,531 @@ async _fetchTriggerInfoBatched(executions, includeRawContext = false, options = 
     }
 
     return inputCount > 0 ? inputs : null;
+  }
+
+  // ============================================
+  // TAG MANAGEMENT
+  // ============================================
+
+  /**
+   * Get all tags for the current org
+   * @param {Object} options - { search, offset, limit, includeOrgs }
+   * @returns {Promise<Array>} Array of tag objects { id, name, color, description, orgId }
+   */
+  async getTags(options = {}) {
+    const { search = {}, offset = 0, limit = 100, includeOrgs = false } = options;
+    const orgFragment = includeOrgs ? `organizations { id name isEnabled }` : '';
+    const result = await this._graphql('getTags', `
+      query getTags($order: [[String!]!], $offset: Int, $where: TagWhereInput!, $search: TagSearchInput, $includeTagsWithNoOwner: Boolean) {
+        tags(search: $search, where: $where, order: $order, offset: $offset, includeTagsWithNoOwner: $includeTagsWithNoOwner) {
+          id name color description orgId ${orgFragment}
+        }
+      }`, { order: [['name', 'asc']], offset, where: { orgId: this.orgId }, search, includeTagsWithNoOwner: false });
+    return result?.tags || [];
+  }
+
+  /**
+   * Create a new tag
+   * @param {string} name - Tag name
+   * @param {Object} options - { color, description }
+   * @returns {Promise<Object>} Created tag { id, name, color, description, orgId }
+   */
+  async createTag(name, options = {}) {
+    const { color, description } = options;
+    const tag = { name, orgId: this.orgId };
+    if (color) tag.color = color;
+    if (description) tag.description = description;
+    const result = await this._graphql('createTag', `
+      mutation createTag($tag: TagCreateInput!) {
+        createTag(tag: $tag) { id name color description orgId }
+      }`, { tag });
+    return result?.createTag;
+  }
+
+  /**
+   * Update a tag
+   * @param {string} id - Tag ID
+   * @param {Object} updates - { name, color, description }
+   * @returns {Promise<Object>} Updated tag
+   */
+  async updateTag(id, updates = {}) {
+    const tag = { id, orgId: this.orgId, ...updates };
+    const result = await this._graphql('updateTag', `
+      mutation updateTag($tag: TagUpdateInput!) {
+        updateTag(tag: $tag) { id name color description orgId }
+      }`, { tag });
+    return result?.updateTag;
+  }
+
+  /**
+   * Delete a tag
+   * @param {string} id - Tag ID
+   * @returns {Promise<string>} Deleted tag ID
+   */
+  async deleteTag(id) {
+    const result = await this._graphql('deleteTag', `
+      mutation deleteTag($id: ID!) { deleteTag(id: $id) }`, { id });
+    return result?.deleteTag;
+  }
+
+  // ============================================
+  // WORKFLOW TAG MANAGEMENT
+  // ============================================
+
+  /**
+   * Get workflows with full details including tags
+   * @param {Object} options - { search, hasTagIds, excludeTagIds, limit, offset, order }
+   * @returns {Promise<Array>} Array of workflow objects with tags
+   */
+  async getWorkflowsWithTags(options = {}) {
+    const { search = {}, hasTagIds = [], excludeTagIds = [], limit = 50, offset = 0 } = options;
+    const result = await this._graphql('getWorkflows', `
+      query getWorkflows($hasTagIds: [ID!], $excludeTagIds: [ID!], $limit: Int, $offset: Int, $search: WorkflowSearch, $where: WorkflowWhereInput) {
+        workflows(hasTagIds: $hasTagIds, excludeTagIds: $excludeTagIds, limit: $limit, offset: $offset, search: $search, where: $where) {
+          id name type description humanSecondsSaved timeout isSynchronized clonedFromId createdAt updatedAt
+          tags { id name color description orgId }
+          triggers { name id enabled triggerType { name id ref } }
+          clones { id }
+          createdBy { username }
+          updatedBy { username }
+        }
+      }`, { hasTagIds, excludeTagIds, limit, offset, search, where: { orgId: this.orgId } });
+    return result?.workflows || [];
+  }
+
+  /**
+   * Set tags on a workflow (replaces all existing tags)
+   * @param {string} workflowId - Workflow ID
+   * @param {Array<string>} tagIds - Array of tag IDs to set
+   * @param {Object} options - { name, humanSecondsSaved, timeout, description }
+   * @returns {Promise<Object>} Updated workflow
+   */
+  async setWorkflowTags(workflowId, tagIds, options = {}) {
+    const workflow = { id: workflowId, tagIds, orgId: this.orgId, ...options };
+    const result = await this._graphql('updateWorkflow', `
+      mutation updateWorkflow($workflow: WorkflowInput!, $comment: String!) {
+        workflow: updateWorkflow(workflow: $workflow, comment: $comment, createPatch: true) {
+          id name tags { id name color } humanSecondsSaved
+        }
+      }`, { workflow, comment: options.comment || 'Updated via RewstApp lib' });
+    return result?.workflow;
+  }
+
+  /**
+   * Bulk set tags on multiple workflows
+   * @param {Array<string>} workflowIds - Array of workflow IDs
+   * @param {Array<string>} tagIds - Array of tag IDs to set on all workflows
+   * @returns {Promise<Array>} Updated workflows
+   */
+  async bulkSetWorkflowTags(workflowIds, tagIds) {
+    const result = await this._graphql('bulkSetWorkflowTags', `
+      mutation bulkSetWorkflowTags($workflowIds: [ID!]!, $tagIds: [ID!]!) {
+        bulkSetWorkflowTags(workflowIds: $workflowIds, tagIds: $tagIds) { id name tags { id name color } }
+      }`, { workflowIds, tagIds });
+    return result?.bulkSetWorkflowTags;
+  }
+
+  /**
+   * Update humanSecondsSaved on a workflow
+   * @param {string} workflowId - Workflow ID
+   * @param {number} seconds - Human seconds saved value
+   * @returns {Promise<Object>} Updated workflow
+   */
+  async setWorkflowTimeSaved(workflowId, seconds) {
+    return this.setWorkflowTags(workflowId, undefined, { humanSecondsSaved: seconds, comment: 'Updated time saved via RewstApp lib' });
+  }
+
+  // ============================================
+  // SCRIPTS / TEMPLATES
+  // ============================================
+
+  /**
+   * Get all scripts or templates
+   * @param {string} contentType - 'script' or 'template'
+   * @param {Object} options - { search, limit, offset, order }
+   * @returns {Promise<Array>} Array of template objects with tags
+   */
+  async getTemplates(contentType = 'script', options = {}) {
+    const { search = {}, limit = 50, offset = 0, order = [['name', 'desc']] } = options;
+    const result = await this._graphql('getTemplatesList', `
+      query getTemplatesList($order: [[String!]!], $limit: Int, $offset: Int, $search: TemplateSearch, $orgId: ID!, $contentType: String) {
+        templates(search: $search, order: $order, limit: $limit, offset: $offset, where: {orgId: $orgId, contentType: $contentType}) {
+          id createdAt updatedAt name description body contentType language isSynchronized clonedFromId
+          tags { id name color description orgId }
+          clones { id }
+          updatedBy { username }
+        }
+      }`, { order, limit, offset, search, orgId: this.orgId, contentType });
+    return result?.templates || [];
+  }
+
+  /**
+   * Get a single script/template by ID with full details
+   * @param {string} id - Template ID
+   * @returns {Promise<Object>} Template with tags, permissions, body
+   */
+  async getTemplate(id) {
+    const result = await this._graphql('getTemplate', `
+      query getTemplate($id: ID!, $orgId: ID!) {
+        template(where: {id: $id, orgId: $orgId}) {
+          id name description body contentType isSynchronized clonedFromId language isShared cloneOverrides
+          tags { id name color description orgId }
+          permission { id templateId roleIds authorizedForOrganizations { id name } override }
+        }
+      }`, { id, orgId: this.orgId });
+    return result?.template;
+  }
+
+  /**
+   * Update a script/template (body, tags, sync)
+   * @param {string} id - Template ID
+   * @param {Object} updates - { body, name, description, tags, isSynchronized, language, contentType }
+   * @returns {Promise<Object>} Updated template
+   */
+  async updateTemplate(id, updates = {}) {
+    const template = { id, ...updates };
+    if (!template.contentType) template.contentType = 'script';
+    const result = await this._graphql('updateTemplate', `
+      mutation updateTemplate($template: TemplateUpdateInput!) {
+        template: updateTemplate(template: $template) {
+          id name description body contentType isSynchronized language
+          tags { id name color description orgId }
+        }
+      }`, { template });
+    return result?.template;
+  }
+
+  /**
+   * Get synced clones of a template
+   * @param {string} id - Template ID
+   * @returns {Promise<Array>} Array of clone objects with sync status
+   */
+  async getTemplateSyncedClones(id) {
+    const result = await this._graphql('GetSyncedTemplateClones', `
+      query GetSyncedTemplateClones($id: ID!) {
+        clones: templates(where: {clonedFromId: $id}, search: {organization: {isEnabled: {_eq: true}, isDeleted: {_eq: false}}}) {
+          id name isSynchronized organization { id name }
+        }
+      }`, { id });
+    return result?.clones || [];
+  }
+
+  // ============================================
+  // CLONE / SYNC OPERATIONS (Universal)
+  // ============================================
+
+  /**
+   * Clone any object (workflow, template, site, form, page)
+   * @param {string} objectType - 'workflow' | 'template' | 'site' | 'form' | 'page'
+   * @param {string} id - Source object ID
+   * @param {string} targetOrgId - Target org ID
+   * @param {Object} options - { name, isSynchronized }
+   * @returns {Promise<Object>} Cloned object
+   */
+  async shallowClone(objectType, id, targetOrgId, options = {}) {
+    const { name } = options;
+    const typeMap = {
+      workflow: { mutation: 'shallowCloneWorkflow', returnType: 'Workflow' },
+      template: { mutation: 'shallowCloneTemplate', returnType: 'Template' },
+      site: { mutation: 'shallowCloneSite', returnType: 'Site' },
+      form: { mutation: 'shallowCloneForm', returnType: 'Form' },
+    };
+    const config = typeMap[objectType];
+    if (!config) throw new Error(`Invalid objectType: ${objectType}. Use: ${Object.keys(typeMap).join(', ')}`);
+    const overrides = name ? { name } : undefined;
+    const result = await this._graphql(config.mutation, `
+      mutation ${config.mutation}($id: ID!, $orgId: ID!, $overrides: ShallowCloneOverridesInput) {
+        ${config.mutation}(id: $id, orgId: $orgId, overrides: $overrides) { id name }
+      }`, { id, orgId: targetOrgId, overrides });
+    return result?.[config.mutation];
+  }
+
+  /**
+   * Unsync a clone (stop receiving updates from parent)
+   * @param {string} id - Clone ID
+   * @param {string} objectType - 'workflow' | 'template' | 'site' | 'form' | 'page' | 'trigger'
+   */
+  async unsyncClone(id, objectType) {
+    const result = await this._graphql('unsyncClone', `
+      mutation unsyncClone($id: ID!, $objectType: CloneableObjectType!) { unsyncClone(id: $id, objectType: $objectType) }
+    `, { id, objectType });
+    return result?.unsyncClone;
+  }
+
+  /**
+   * Unlink a clone (fully detach from parent)
+   * @param {string} id - Clone ID
+   * @param {string} objectType - 'workflow' | 'template' | 'site' | 'form' | 'page' | 'trigger'
+   */
+  async unlinkClone(id, objectType) {
+    const result = await this._graphql('unlinkClone', `
+      mutation unlinkClone($id: ID!, $objectType: CloneableObjectType!) { unlinkClone(id: $id, objectType: $objectType) }
+    `, { id, objectType });
+    return result?.unlinkClone;
+  }
+
+  // ============================================
+  // APPS / SITES
+  // ============================================
+
+  /**
+   * Get all apps for the current org
+   * @returns {Promise<Array>} Array of site objects
+   */
+  async getApps() {
+    const result = await this._graphql('getSitesForOrg', `
+      query getSitesForOrg($orgId: ID, $search: SiteSearchInput) {
+        sites(search: $search, where: {orgId: $orgId}) {
+          id name domain customDomain isLive statusCode statusMessage orgId createdAt updatedAt useCustomDomain
+          pages { id }
+          clonedFromId isSynchronized clones { id }
+          createdBy { username }
+          updatedBy { username }
+        }
+      }`, { orgId: this.orgId, search: {} });
+    return result?.sites || [];
+  }
+
+  /**
+   * Create a new app
+   * @param {string} name - App name
+   * @param {string} domain - Domain slug (e.g. 'my-app' becomes org-slug-my-app.rew.st)
+   * @param {Object} options - { theme }
+   * @returns {Promise<Object>} Created site { id, name, domain }
+   */
+  async createApp(name, domain, options = {}) {
+    const site = { name, domain, orgId: this.orgId };
+    if (options.theme) site.theme = options.theme;
+    const result = await this._graphql('createSite', `
+      mutation createSite($site: SiteCreateInput!) {
+        site: createSite(site: $site) { id name domain }
+      }`, { site });
+    return result?.site;
+  }
+
+  /**
+   * Update an app (name, publish, custom domain, etc.)
+   * @param {string} id - Site ID
+   * @param {Object} updates - { name, isLive, domain, customDomain, useCustomDomain, theme, isSynchronized }
+   * @returns {Promise<Object>} Updated site
+   */
+  async updateApp(id, updates = {}) {
+    const site = { id, ...updates };
+    const result = await this._graphql('updateSite', `
+      mutation updateSite($site: SiteUpdateInput!) {
+        updateSite(site: $site) { id name isLive statusCode statusMessage domain }
+      }`, { site });
+    return result?.updateSite;
+  }
+
+  /**
+   * Publish or unpublish an app
+   * @param {string} id - Site ID
+   * @param {boolean} live - true to publish, false to unpublish
+   * @returns {Promise<Object>} Updated site with status
+   */
+  async publishApp(id, live = true) {
+    return this.updateApp(id, { isLive: live });
+  }
+
+  /**
+   * Delete an app
+   * @param {string} id - Site ID
+   */
+  async deleteApp(id) {
+    await this._graphql('deleteSite', `mutation deleteSite($id: ID!) { deleteSite(id: $id) }`, { id });
+  }
+
+  // ============================================
+  // PAGES
+  // ============================================
+
+  /** Blank page preset (lzutf8+base64 encoded Craft.js ROOT Container) */
+  static BLANK_PAGE_PRESET = 'eyJST09UIjp7InR5cGXECHJlc29sdmVkTmFtZSI6IkNvbnRhaW5lciJ9LCJu0BQsImRpc3BsYXnRLiwicHJvcHPEUmlkIjoiQmxhbmsiLCJ3aWR0aCI6IjEwMCUiLCJoZWlnaHTIEH0sImN1c3RvbSI6e30sInBhcmVudCI6bnVsbCwiaXNDYW52YXMiOnRydWUsImhpZGRlbiI6ZmFsc2UsIm5vZGVzIjpbXSwibGlua2VkTsYRe319fQ==';
+
+  /**
+   * Get pages for a site
+   * @param {string} siteId - Site ID
+   * @returns {Promise<Array>} Array of page objects
+   */
+  async getPages(siteId) {
+    const result = await this._graphql('getPagesForSite', `
+      query getPagesForSite($siteId: ID!) {
+        pages(where: {siteId: $siteId}, order: [["name", "asc"]]) {
+          id name path orgId siteId createdAt updatedAt isSynchronized clonedFromId
+          clones { id }
+          createdBy { username }
+          updatedBy { username }
+        }
+      }`, { siteId });
+    return result?.pages || [];
+  }
+
+  /**
+   * Create a new page in an app
+   * @param {string} siteId - Site ID
+   * @param {string} name - Page name
+   * @param {string} path - URL path (e.g. 'my-page')
+   * @param {Object} options - { preset }
+   * @returns {Promise<Object>} Created page { id, name }
+   */
+  async createPage(siteId, name, path, options = {}) {
+    const page = { siteId, name, path: path || name.toLowerCase().replace(/\s+/g, '-'), orgId: this.orgId };
+    const preset = options.preset || RewstApp.BLANK_PAGE_PRESET;
+    const result = await this._graphql('createPage', `
+      mutation createPage($page: PageCreateInput!, $preset: String) {
+        page: createPage(page: $page, preset: $preset) { name id }
+      }`, { page, preset });
+    return result?.page;
+  }
+
+  /**
+   * Get the encoded page content (Craft.js node tree)
+   * @param {string} pageId - Page ID
+   * @returns {Promise<string>} Base64 encoded page content
+   */
+  async getPageContent(pageId) {
+    const result = await this._graphql('getPageNodes', `
+      query getPageNodes($where: PageWhereInput!) {
+        pageNodes(where: $where) { encoded }
+      }`, { where: { id: pageId } });
+    return result?.pageNodes?.encoded;
+  }
+
+  /**
+   * Set page content from an encoded string (copy content between pages)
+   * @param {string} pageId - Target page ID
+   * @param {string} siteId - Site ID
+   * @param {string} encodedNodes - Base64 encoded Craft.js node tree
+   * @returns {Promise<Object>} Updated page
+   */
+  async setPageContent(pageId, siteId, encodedNodes) {
+    const result = await this._graphql('updatePage', `
+      mutation updatePage($page: PageUpdateInput!) {
+        updatePage(page: $page) { id name updatedAt }
+      }`, { page: { id: pageId, siteId, pageNodes: encodedNodes } });
+    return result?.updatePage;
+  }
+
+  /**
+   * Build a page with an HTMLContainer and set its content
+   * @param {string} pageId - Target page ID
+   * @param {string} siteId - Site ID
+   * @param {string} htmlContent - Full HTML content for the HTMLContainer
+   * @returns {Promise<Object>} Updated page
+   */
+  async setPageHtml(pageId, siteId, htmlContent) {
+    const craftState = {
+      ROOT: {
+        type: { resolvedName: "Container" },
+        isCanvas: true,
+        props: {
+          id: "Blank", width: "100%", height: "100%",
+          margin: ["0","0","0","0"], padding: ["0","0","0","0"],
+          overflow: "auto", fillSpace: "no", resizable: true,
+          flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start",
+          background: { r: 255, g: 255, b: 255, a: 1 }, backgroundType: "paper",
+          color: { r: 0, g: 0, b: 0, a: 1 }, radius: 0, shadow: 0, overrideTheme: false,
+          templates: [], linkedPages: []
+        },
+        displayName: "Container", custom: {}, parent: null, hidden: false,
+        nodes: ["htmlNode1"], linkedNodes: {}
+      },
+      htmlNode1: {
+        type: { resolvedName: "HTMLContainer" },
+        isCanvas: false,
+        props: {
+          html: htmlContent,
+          size: {
+            width: { max: { unit: "%", value: 100 }, min: { unit: "%", value: 0 }, fixSize: 100, fixUnit: "%", sizeType: "fixed", fitToContent: false },
+            height: { max: { unit: "%", value: 100 }, min: { unit: "%", value: 0 }, fixSize: 100, fixUnit: "%", sizeType: "responsive", fitToContent: false }
+          },
+          margin: 0, padding: 0, styles: {},
+          templates: [], linkedPages: []
+        },
+        displayName: "HTMLContainer", custom: {}, parent: "ROOT", hidden: false,
+        nodes: [], linkedNodes: {}
+      }
+    };
+    const jsonStr = JSON.stringify(craftState);
+    // UTF-8 safe base64 encoding (btoa only handles Latin1)
+    const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+    return this.setPageContent(pageId, siteId, encoded);
+  }
+
+  /**
+   * Copy page content from one page to another
+   * @param {string} sourcePageId - Source page ID
+   * @param {string} targetPageId - Target page ID
+   * @param {string} targetSiteId - Target site ID
+   * @returns {Promise<Object>} Updated target page
+   */
+  async copyPageContent(sourcePageId, targetPageId, targetSiteId) {
+    const encoded = await this.getPageContent(sourcePageId);
+    if (!encoded) throw new Error('Source page has no content');
+    return this.setPageContent(targetPageId, targetSiteId, encoded);
+  }
+
+  /**
+   * Delete a page
+   * @param {string} id - Page ID
+   */
+  async deletePage(id) {
+    await this._graphql('deletePage', `mutation deletePage($id: ID!) { deletePage(id: $id) }`, { id });
+  }
+
+  // ============================================
+  // APP BUILDER (High-level orchestration)
+  // ============================================
+
+  /**
+   * Create a complete app with pages and HTML content
+   * @param {Object} config - { name, domain, pages: [{ name, path, html }], publish }
+   * @returns {Promise<Object>} { site, pages }
+   */
+  async buildApp(config) {
+    const { name, domain, pages = [], publish = false } = config;
+    this._log(`🏗️ Creating app: ${name}`);
+
+    // 1. Create the site
+    const site = await this.createApp(name, domain);
+    this._log(`✅ App created: ${site.id} (${site.domain})`);
+
+    // 2. Get the default pages (home + login are auto-created)
+    const defaultPages = await this.getPages(site.id);
+    this._log(`📄 Default pages: ${defaultPages.map(p => p.name).join(', ')}`);
+
+    // 3. Create additional pages and set content
+    const createdPages = [...defaultPages];
+    for (const pageConfig of pages) {
+      const isDefault = defaultPages.find(p => p.name === pageConfig.name || p.path === pageConfig.path);
+      let page;
+      if (isDefault) {
+        page = isDefault;
+        this._log(`📝 Using existing page: ${page.name}`);
+      } else {
+        page = await this.createPage(site.id, pageConfig.name, pageConfig.path);
+        createdPages.push(page);
+        this._log(`📝 Created page: ${page.name}`);
+      }
+
+      // Set HTML content if provided
+      if (pageConfig.html) {
+        await this.setPageHtml(page.id, site.id, pageConfig.html);
+        this._log(`🎨 Set HTML content on: ${page.name}`);
+      } else if (pageConfig.sourcePageId) {
+        await this.copyPageContent(pageConfig.sourcePageId, page.id, site.id);
+        this._log(`📋 Copied content to: ${page.name}`);
+      }
+    }
+
+    // 4. Publish if requested
+    if (publish) {
+      await this.publishApp(site.id);
+      this._log(`🚀 App published!`);
+    }
+
+    return { site, pages: createdPages };
   }
 
 }

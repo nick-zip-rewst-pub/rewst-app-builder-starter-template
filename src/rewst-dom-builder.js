@@ -3454,6 +3454,12 @@ const RewstDOM = {
       }
     };
     container.clear = () => clearSelection();
+    container.updateItems = (newItems) => {
+      items = newItems;
+      if (isDropdownOpen) {
+        showDropdown();
+      }
+    };
 
     return container;
   },

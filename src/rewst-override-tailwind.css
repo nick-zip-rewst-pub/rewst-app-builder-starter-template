@@ -981,11 +981,11 @@ select#form-selector {
 
 
 /* Toggle switch styling */
-input[type="checkbox"].sr-only:checked+.toggle-bg {
+#exclude-test-runs:checked+.toggle-bg {
   background-color: #009490 !important;
 }
 
-input[type="checkbox"].sr-only:focus+.toggle-bg {
+#exclude-test-runs:focus+.toggle-bg {
   box-shadow: 0 0 0 3px rgba(0, 148, 144, 0.2);
 }
 
@@ -1199,16 +1199,21 @@ input[type="checkbox"].sr-only:focus+.toggle-bg {
     FILTER SIDE BAR STYLING 
     ============================================ */
 
-/* Filter Drawer Styles */
-#filter-drawer.open,
+/* Advanced Filter Drawer Styles */
 #advanced-filter-drawer.open {
   transform: translateX(0);
 }
 
-#filter-overlay.open,
 #advanced-filter-overlay.open {
   display: block;
   opacity: 1;
+}
+
+/* Dropdown animations */
+#org-filter-dropdown,
+#date-filter-dropdown,
+#trigger-filter-dropdown {
+  animation: slideDown 0.2s ease-out;
 }
 
 @keyframes slideDown {
